@@ -60,18 +60,50 @@ class PrimaryReadReplicaConnection extends Connection
 
     /**
      * Returns config for read replicas connections.
-     *
-     * @param array  $replicas
-     * @param string $driver
-     *
-     * @return array
      */
-    public function getReplicasConfig(array $replicas, $driver)
+    public function getReplicasConfig(array $replicas, string $driver): array
+    {
+        // Handle undocumented laravel read/write config,
+        // which allows multiple replica configs to be specified in ['read'] config option
+        if (isset($replicas[0])) {
+            // Treat $replicas as an array of configs
+            $handledReplicas = [];
+
+            foreach ($replicas as $replicaConfig) {
+                $handledReplicas[] = $this->getReplicasConfiguration($replicaConfig, $driver);
+            }
+
+            return array_merge(...$handledReplicas);
+        }
+
+        // Or handle documented laravel configuration format
+        return $this->getReplicasConfiguration($replicas, $driver);
+    }
+
+    /**
+     * Creates a configuration for replica based on standard documented Laravel format:
+     * Compatible with Laravel 5.5 and Laravel 5.6+ config
+     * @see https://laravel.com/docs/8.x/database#read-and-write-connections
+     * @see https://laravel.com/docs/5.6/database#read-and-write-connections
+     */
+    private function getReplicasConfiguration(array $replicaConfig, string $driver): array
     {
         $handledReplicas = [];
-        foreach ($replicas as $replica) {
-            $handledReplicas[] = $this->getConnectionData($replica, $driver);
+
+        // Handle Laravel 5.6 config with 'host' as an array
+        if (isset($replicaConfig['host']) && is_array($replicaConfig['host'])) {
+            foreach ($replicaConfig['host'] as $host) {
+                $replica           = $this->getConnectionData($replicaConfig, $driver);
+                $replica['host']   = $host;
+                $handledReplicas[] = $replica;
+            }
+
+            return $handledReplicas;
         }
+
+        // Handle string in 'host' key and config without 'host' key at all
+        $replica           = $this->getConnectionData($replicaConfig, $driver);
+        $handledReplicas[] = $replica;
 
         return $handledReplicas;
     }
