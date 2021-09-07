@@ -40,11 +40,19 @@ class PrimaryReadReplicaConnection extends Connection
     {
         $driver = $this->resolvedBaseSettings['driver'];
 
+        $writeReplicas = $this->getReplicasConfiguration(isset($settings['write']) ? $settings['write'] : [], $driver);
+
+        if (count($writeReplicas) !== 1) {
+            throw new \InvalidArgumentException(
+                "There should be exactly 1 write replica. " . count($writeReplicas) . " found."
+            );
+        }
+
         $resolvedSettings = [
             'wrapperClass'  => $settings['wrapperClass'] ?? PrimaryReadReplicaDoctrineWrapper::class,
             'driver'        => $driver,
-            'primary'       => $this->getConnectionData(isset($settings['write']) ? $settings['write'] : [], $driver),
-            'replica'       => $this->getReplicasConfig($settings['read'], $driver),
+            'primary'       => $writeReplicas[0],
+            'replica'       => $this->getReadReplicasConfig($settings['read'], $driver),
         ];
 
         if (!empty($settings['serverVersion'])) {
@@ -61,7 +69,7 @@ class PrimaryReadReplicaConnection extends Connection
     /**
      * Returns config for read replicas connections.
      */
-    public function getReplicasConfig(array $replicas, string $driver): array
+    public function getReadReplicasConfig(array $replicas, string $driver): array
     {
         // Handle undocumented laravel read/write config,
         // which allows multiple replica configs to be specified in ['read'] config option
